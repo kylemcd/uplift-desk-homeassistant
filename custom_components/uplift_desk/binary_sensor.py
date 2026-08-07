@@ -8,6 +8,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import UpliftDeskConfigEntry
@@ -20,6 +21,12 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up desk binary sensors."""
+    registry = er.async_get(hass)
+    address = str(entry.runtime_data.data.get("address", "unknown"))
+    legacy_prefix = f"{address}_presence_".lower().replace(":", "")
+    for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if registry_entry.unique_id.startswith(legacy_prefix):
+            registry.async_remove(registry_entry.entity_id)
     async_add_entities(
         [
             UpliftConnectedSensor(entry.runtime_data),
