@@ -61,6 +61,9 @@ export class BluezUpliftTransport implements UpliftTransport {
     const notificationSession = this.#notificationSession
     void notificationSession.closed.then((error) => {
       if (this.#notificationSession !== notificationSession || !this.#connected) return
+      this.#notificationSession = undefined
+      if (this.#connectionPoll) clearInterval(this.#connectionPoll)
+      this.#connectionPoll = undefined
       this.#connected = false
       this.#events.emit("disconnect", error ?? new Error("Bluetooth notification session ended"))
     })
@@ -73,8 +76,9 @@ export class BluezUpliftTransport implements UpliftTransport {
     this.#connected = false
     if (this.#connectionPoll) clearInterval(this.#connectionPoll)
     this.#connectionPoll = undefined
-    this.#notificationSession?.close()
+    const notificationSession = this.#notificationSession
     this.#notificationSession = undefined
+    notificationSession?.close()
     if (this.#devicePath) await this.#runner.call(["call", "org.bluez", this.#devicePath, "org.bluez.Device1", "Disconnect"]).catch(() => undefined)
   }
 
@@ -135,6 +139,11 @@ export class BluezUpliftTransport implements UpliftTransport {
       const objects = await this.#managedObjects()
       const connected = this.#devicePath ? variantValue(objects[this.#devicePath]?.["org.bluez.Device1"]?.Connected) === true : false
       if (!connected && this.#connected) {
+        if (this.#connectionPoll) clearInterval(this.#connectionPoll)
+        this.#connectionPoll = undefined
+        const notificationSession = this.#notificationSession
+        this.#notificationSession = undefined
+        notificationSession?.close()
         this.#connected = false
         this.#events.emit("disconnect")
       }

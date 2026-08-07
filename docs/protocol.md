@@ -7,9 +7,11 @@ Jiecang hardware.
 The Linux transport invokes systemd's `busctl` for BlueZ method calls and
 `bluetoothctl` for discovery and a persistent GATT notification session. The
 persistent process is required because BlueZ binds a notification subscription
-to the D-Bus connection that requested it. Both tools communicate through the
-system D-Bus; neither claims a raw Bluetooth HCI socket. No JavaScript D-Bus
-binding is included as a runtime dependency.
+to the D-Bus connection that requested it. The transport closes that process
+when the device disconnects so a new connection cannot leave an orphaned
+notification owner. Both tools communicate through the system D-Bus; neither
+claims a raw Bluetooth HCI socket. No JavaScript D-Bus binding is included as a
+runtime dependency.
 
 ## Observed hardware
 
