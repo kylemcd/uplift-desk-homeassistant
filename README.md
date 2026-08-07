@@ -1,53 +1,83 @@
-# UPLIFT Desk BLE
+# UPLIFT Desk for Home Assistant
 
-An unofficial, safety-focused TypeScript library for controlling compatible
-UPLIFT/Jiecang standing desks over Bluetooth Low Energy on Linux.
+A HACS custom integration for controlling an UPLIFT/Jiecang standing desk
+through a network Bluetooth Broker.
 
-The library speaks to BlueZ through the host's `busctl`, `bluetoothctl`, and
-`dbus-monitor` utilities. The bounded `bluetoothctl` process owns only its own
-discovery lease. It does not access a raw HCI socket or ship a third-party
-D-Bus runtime, so the Bluetooth controller remains available to normal Linux
-consumers such as PipeWire and WirePlumber.
+The integration creates native Home Assistant entities while the broker remains
+the sole owner of the physical BLE session. This is intended for installations
+where the Bluetooth radio is attached to another Linux host or VM and is shared
+with Bluetooth audio.
 
 > [!WARNING]
-> This project implements undocumented vendor commands that can move or
-> reconfigure motorized furniture. Clear the desk, keep the physical handset
-> within reach, and validate every command against your exact hardware revision.
+> Standing-desk commands can move or reconfigure motorized furniture. Clear the
+> desk, keep the physical handset within reach, and qualify commands against
+> your exact hardware revision. Calibration, reset, preset writes, and limit
+> changes remain in the broker's confirmation UI and are not exposed directly
+> to Home Assistant.
 
-## Installation
+## Install with HACS
 
-Releases contain an npm-compatible tarball. Pin the tarball URL and checksum in
-your consuming application; this package is intentionally not published to npm.
+1. Open HACS in Home Assistant.
+2. Add `https://github.com/kylemcd/uplift-desk-homeassistant` as a custom
+   repository with category **Integration**.
+3. Install **UPLIFT Desk** and restart Home Assistant.
+4. Open **Settings → Devices & services → Add integration → UPLIFT Desk**.
+5. Enter the Tailnet URL of the broker. The default is
+   `https://bluetooth.kpm.house`.
 
-## Example
+The config flow validates the broker and uses the desk's stable Bluetooth MAC
+address as the config-entry identity.
 
-```ts
-import { BluezUpliftTransport, UpliftDeskController } from "@kylemcd/uplift-desk-ble"
+## Home Assistant entities
 
-const transport = new BluezUpliftTransport({ address: "F2:94:81:26:3D:5D" })
-const desk = new UpliftDeskController(transport)
+Enabled by default:
 
-desk.onEvent((event) => console.log(event))
-await desk.connect()
-await desk.requestUnits()
-await desk.requestHeightLimits()
+- Desk cover: stand, sit, stop, and validated position movement
+- Current height
+- Connection and reset-required status
+- Movement and error state
+- Target height, which stages a value without moving the desk
+- Move to target, sit, stand, and stop buttons
+
+Disabled by default:
+
+- Fixed 500 ms jog up/down buttons
+- Ten-minute release-for-phone button
+
+Cover and target controls become unavailable when the broker does not know the
+desk's effective limits or mapped preset heights. The integration never guesses
+movement bounds.
+
+## Architecture
+
+```text
+UPLIFT desk ← BLE → BlueZ/Bluetooth Broker ← HTTPS/Tailnet → Home Assistant
+                         ↕
+                 PipeWire / Bluetooth audio
 ```
 
-See [the protocol notes](docs/protocol.md) for the observed wire format,
-supported BLE profiles, and command confidence.
+The custom integration contains no Bluetooth stack and cannot claim a USB
+radio. The private broker validates GATT profiles, serializes writes, prioritizes
+stop, enforces limits, and implements confirmation workflows.
 
-## Project boundaries
+## Protocol library
 
-This repository contains only the reusable UPLIFT BLE protocol and BlueZ
-transport. Home Assistant, MQTT, device assignment, and web UI concerns belong
-in consuming applications.
+The repository also retains the strict TypeScript protocol package used by the
+broker. Release `v0.1.0` contains the immutable
+`@kylemcd/uplift-desk-ble` tarball. See [the protocol notes](docs/protocol.md)
+for the observed packet format and FF00 hardware fingerprint.
 
-## Acknowledgements
+The Linux transport uses the installed `busctl`, `bluetoothctl`, and
+`dbus-monitor` tools. It has no `dbus-next`, Noble, or raw-HCI dependency.
 
-The packet format and command catalogue were cross-checked against the
-MIT-licensed [`librick/uplift-ble`](https://github.com/librick/uplift-ble)
-project and independently verified against an UPLIFT adapter exposing the FF00
-service layout.
+## Development
+
+```bash
+npm ci
+npm run check
+```
+
+Pull requests also run Home Assistant hassfest and HACS validation.
 
 ## License
 

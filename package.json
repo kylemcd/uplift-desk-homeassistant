@@ -22,7 +22,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "check:hacs": "python3 -m compileall -q custom_components",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run check:hacs"
   },
   "dependencies": {},
   "devDependencies": {

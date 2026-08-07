@@ -1,0 +1,30 @@
+{
+  "title": "UPLIFT Desk",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Bluetooth Broker",
+        "description": "The Bluetooth Broker owns the desk's BLE connection and safety controls.",
+        "data": {
+          "broker_url": "Broker URL"
+        },
+        "data_description": {
+          "broker_url": "Tailnet URL of the Bluetooth Broker, including https://"
+        }
+      },
+      "reconfigure": {
+        "title": "Update Bluetooth Broker",
+        "data": {
+          "broker_url": "Broker URL"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the Bluetooth Broker"
+    },
+    "abort": {
+      "already_configured": "This desk is already configured"
+    }
+  }
+}
+

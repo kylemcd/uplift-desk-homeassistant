@@ -1,0 +1,13 @@
+{
+  "domain": "uplift_desk",
+  "name": "UPLIFT Desk",
+  "codeowners": ["@kylemcd"],
+  "config_flow": true,
+  "documentation": "https://github.com/kylemcd/uplift-desk-homeassistant",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/kylemcd/uplift-desk-homeassistant/issues",
+  "requirements": [],
+  "version": "0.2.0"
+}
+
