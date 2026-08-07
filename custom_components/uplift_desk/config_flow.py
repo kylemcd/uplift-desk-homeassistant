@@ -9,9 +9,20 @@ import voluptuous as vol
 from bleak import BleakClient
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_ADDRESS, CONF_NAME
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
+from homeassistant.const import CONF_ADDRESS, CONF_NAME, UnitOfLength
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
 from uplift_ble import DeskValidator
 
 from .api import BluetoothBrokerApi, DeskApiError
@@ -19,9 +30,11 @@ from .const import (
     CONF_BROKER_URL,
     CONF_CONNECTION_TYPE,
     CONF_DESK_ID,
+    CONF_VIRTUAL_PRESETS,
     CONNECTION_BLUETOOTH,
     CONNECTION_BROKER,
     DOMAIN,
+    MM_PER_INCH,
     SUPPORTED_SERVICE_UUIDS,
 )
 
@@ -38,6 +51,14 @@ class UpliftDeskConfigFlow(ConfigFlow, domain=DOMAIN):
         self._discovered_devices: dict[str, BluetoothServiceInfoBleak] = {}
         self._broker_url: str | None = None
         self._broker_desks: dict[str, dict[str, Any]] = {}
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        _config_entry: ConfigEntry,
+    ) -> UpliftDeskOptionsFlow:
+        """Create the virtual-preset management flow."""
+        return UpliftDeskOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -286,3 +307,210 @@ class UpliftDeskConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     def _display_name(info: BluetoothServiceInfoBleak) -> str:
         return f"{info.name or 'UPLIFT Desk'} ({info.address})"
+
+
+class UpliftDeskOptionsFlow(OptionsFlowWithReload):
+    """Manage Home Assistant virtual presets with ordinary forms."""
+
+    def __init__(self) -> None:
+        self._presets: dict[str, float] | None = None
+        self._editing_name: str | None = None
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show the virtual-preset management menu."""
+        self._load_presets()
+        menu_options = ["add_preset"]
+        if self._presets:
+            menu_options.extend(("edit_preset", "delete_preset"))
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=menu_options,
+            description_placeholders={"presets": self._preset_summary()},
+        )
+
+    async def async_step_add_preset(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add a named virtual preset."""
+        self._load_presets()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            name = self._normalize_name(user_input["preset_name"])
+            if not name:
+                errors["preset_name"] = "invalid_name"
+            elif self._matching_name(name) is not None:
+                errors["preset_name"] = "already_exists"
+            else:
+                self._presets[name] = self._inches_to_mm(
+                    user_input["preset_height"]
+                )
+                return self._save()
+        return self.async_show_form(
+            step_id="add_preset",
+            data_schema=self._preset_schema(
+                default_name="",
+                default_height=self._current_height_inches(),
+            ),
+            errors=errors,
+        )
+
+    async def async_step_edit_preset(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose a virtual preset to edit."""
+        self._load_presets()
+        if not self._presets:
+            return await self.async_step_add_preset()
+        if user_input is not None:
+            self._editing_name = user_input["preset"]
+            return await self.async_step_edit_preset_form()
+        return self.async_show_form(
+            step_id="edit_preset",
+            data_schema=self._preset_selection_schema(),
+        )
+
+    async def async_step_edit_preset_form(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit the selected virtual preset."""
+        self._load_presets()
+        if self._editing_name is None or self._editing_name not in self._presets:
+            return await self.async_step_init()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            name = self._normalize_name(user_input["preset_name"])
+            existing_name = self._matching_name(name)
+            if not name:
+                errors["preset_name"] = "invalid_name"
+            elif existing_name is not None and existing_name != self._editing_name:
+                errors["preset_name"] = "already_exists"
+            else:
+                del self._presets[self._editing_name]
+                self._presets[name] = self._inches_to_mm(
+                    user_input["preset_height"]
+                )
+                return self._save()
+        return self.async_show_form(
+            step_id="edit_preset_form",
+            data_schema=self._preset_schema(
+                default_name=self._editing_name,
+                default_height=self._presets[self._editing_name] / MM_PER_INCH,
+            ),
+            errors=errors,
+        )
+
+    async def async_step_delete_preset(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Delete a selected virtual preset."""
+        self._load_presets()
+        if not self._presets:
+            return await self.async_step_init()
+        if user_input is not None:
+            del self._presets[user_input["preset"]]
+            return self._save()
+        return self.async_show_form(
+            step_id="delete_preset",
+            data_schema=self._preset_selection_schema(),
+        )
+
+    def _load_presets(self) -> None:
+        if self._presets is not None:
+            return
+        self._presets = {
+            str(name): float(height)
+            for name, height in self.config_entry.options.get(
+                CONF_VIRTUAL_PRESETS, {}
+            ).items()
+        }
+
+    def _preset_schema(
+        self, *, default_name: str, default_height: float
+    ) -> vol.Schema:
+        minimum, maximum = self._height_bounds_inches()
+        return vol.Schema(
+            {
+                vol.Required("preset_name", default=default_name): vol.All(
+                    str, vol.Length(max=64)
+                ),
+                vol.Required(
+                    "preset_height", default=round(default_height, 1)
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=round(minimum, 1),
+                        max=round(maximum, 1),
+                        step=0.1,
+                        mode=NumberSelectorMode.BOX,
+                        unit_of_measurement=UnitOfLength.INCHES,
+                    )
+                ),
+            }
+        )
+
+    def _preset_selection_schema(self) -> vol.Schema:
+        assert self._presets is not None
+        return vol.Schema(
+            {
+                vol.Required("preset"): vol.In(
+                    {
+                        name: f"{name} ({height / MM_PER_INCH:.1f} in)"
+                        for name, height in sorted(self._presets.items())
+                    }
+                )
+            }
+        )
+
+    def _height_bounds_inches(self) -> tuple[float, float]:
+        coordinator = self.config_entry.runtime_data
+        state = getattr(coordinator, "data", {}) or {}
+        minimum = state.get("minimumMm")
+        maximum = state.get("maximumMm")
+        if minimum is None or maximum is None or maximum <= minimum:
+            return 20.0, 60.0
+        return float(minimum) / MM_PER_INCH, float(maximum) / MM_PER_INCH
+
+    def _current_height_inches(self) -> float:
+        coordinator = self.config_entry.runtime_data
+        state = getattr(coordinator, "data", {}) or {}
+        height = state.get("heightMm") or state.get("targetHeightMm")
+        if height is not None:
+            return float(height) / MM_PER_INCH
+        minimum, _maximum = self._height_bounds_inches()
+        return minimum
+
+    def _preset_summary(self) -> str:
+        assert self._presets is not None
+        if not self._presets:
+            return "No virtual presets configured."
+        return "\n".join(
+            f"• {name}: {height / MM_PER_INCH:.1f} in"
+            for name, height in sorted(self._presets.items())
+        )
+
+    def _save(self) -> ConfigFlowResult:
+        assert self._presets is not None
+        options = dict(self.config_entry.options)
+        options[CONF_VIRTUAL_PRESETS] = dict(self._presets)
+        return self.async_create_entry(title="", data=options)
+
+    @staticmethod
+    def _normalize_name(value: str) -> str:
+        return " ".join(value.split())
+
+    def _matching_name(self, name: str) -> str | None:
+        assert self._presets is not None
+        name_casefold = name.casefold()
+        return next(
+            (
+                existing
+                for existing in self._presets
+                if existing.casefold() == name_casefold
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _inches_to_mm(value: float) -> float:
+        return round(float(value) * MM_PER_INCH, 1)

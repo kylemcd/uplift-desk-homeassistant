@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import BluetoothBrokerApi, DeskApiError
@@ -38,8 +39,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: UpliftDeskConfigEntry) -
     coordinator = UpliftDeskCoordinator(hass, api, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
+    _remove_legacy_preset_editor_entities(hass, entry, coordinator)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+def _remove_legacy_preset_editor_entities(
+    hass: HomeAssistant,
+    entry: UpliftDeskConfigEntry,
+    coordinator: UpliftDeskCoordinator,
+) -> None:
+    """Remove the entity-based preset editor replaced by the options form."""
+    address = str(coordinator.data.get("address", "unknown"))
+    legacy_unique_ids = {
+        f"{address}_{key}".lower().replace(":", "")
+        for key in (
+            "capture_virtual_preset_height",
+            "delete_virtual_preset",
+            "save_virtual_preset",
+            "virtual_preset_height",
+            "virtual_preset_name",
+        )
+    }
+    registry = er.async_get(hass)
+    for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if registry_entry.unique_id in legacy_unique_ids:
+            registry.async_remove(registry_entry.entity_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: UpliftDeskConfigEntry) -> bool:

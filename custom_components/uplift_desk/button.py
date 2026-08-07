@@ -48,28 +48,10 @@ BUTTONS = (
         action="jog_down",
     ),
     UpliftButtonDescription(
-        key="capture_virtual_preset_height",
-        name="Use current height",
-        icon="mdi:arrow-collapse-vertical",
-        action="capture_virtual_preset_height",
-    ),
-    UpliftButtonDescription(
-        key="save_virtual_preset",
-        name="Save virtual preset",
-        icon="mdi:content-save",
-        action="save_virtual_preset",
-    ),
-    UpliftButtonDescription(
         key="recall_virtual_preset",
         name="Recall virtual preset",
         icon="mdi:desk",
         action="recall_virtual_preset",
-    ),
-    UpliftButtonDescription(
-        key="delete_virtual_preset",
-        name="Delete virtual preset",
-        icon="mdi:delete-outline",
-        action="delete_virtual_preset",
     ),
     UpliftButtonDescription(
         key="release",
@@ -130,25 +112,10 @@ class UpliftDeskButton(UpliftDeskEntity, ButtonEntity):
                 and state.get("minimumMm") is not None
                 and state.get("maximumMm") is not None
             )
-        if action == "save_virtual_preset":
-            height = self.coordinator.virtual_preset_height_mm
-            minimum = state.get("minimumMm")
-            maximum = state.get("maximumMm")
-            return bool(
-                self.coordinator.virtual_preset_name.strip()
-                and height is not None
-                and minimum is not None
-                and maximum is not None
-                and minimum <= height <= maximum
-            )
-        if action == "capture_virtual_preset_height":
-            return state.get("heightMm") is not None
-        if action in {"recall_virtual_preset", "delete_virtual_preset"}:
+        if action == "recall_virtual_preset":
             selected = self.coordinator.selected_virtual_preset
             if selected is None or selected not in self.coordinator.virtual_presets:
                 return False
-            if action == "delete_virtual_preset":
-                return True
             height = self.coordinator.virtual_presets[selected]
             minimum = state.get("minimumMm")
             maximum = state.get("maximumMm")
@@ -183,21 +150,11 @@ class UpliftDeskButton(UpliftDeskEntity, ButtonEntity):
             "stop": api.async_stop,
             "jog_up": lambda: api.async_jog("up"),
             "jog_down": lambda: api.async_jog("down"),
-            "capture_virtual_preset_height": (
-                self.coordinator.async_capture_current_height
-            ),
-            "save_virtual_preset": self.coordinator.async_save_virtual_preset,
             "recall_virtual_preset": self.coordinator.async_recall_virtual_preset,
-            "delete_virtual_preset": self.coordinator.async_delete_virtual_preset,
             "release": api.async_release,
         }
         action = self.entity_description.action
-        if action in {
-            "capture_virtual_preset_height",
-            "save_virtual_preset",
-            "recall_virtual_preset",
-            "delete_virtual_preset",
-        }:
+        if action == "recall_virtual_preset":
             await actions[action]()
             return
         await self.coordinator.async_execute(actions[action])

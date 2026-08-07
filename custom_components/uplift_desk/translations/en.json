@@ -55,5 +55,50 @@
       "not_connectable": "This Bluetooth advertisement is not connectable",
       "reconfigure_not_supported": "Native Bluetooth entries do not require connection settings"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Virtual presets",
+        "description": "Add, edit, or delete named desk heights stored by Home Assistant.\n\n{presets}",
+        "menu_options": {
+          "add_preset": "Add preset",
+          "edit_preset": "Edit preset",
+          "delete_preset": "Delete preset"
+        }
+      },
+      "add_preset": {
+        "title": "Add virtual preset",
+        "description": "The current desk height is filled in automatically when it is available.",
+        "data": {
+          "preset_name": "Name",
+          "preset_height": "Height"
+        }
+      },
+      "edit_preset": {
+        "title": "Choose preset to edit",
+        "data": {
+          "preset": "Preset"
+        }
+      },
+      "edit_preset_form": {
+        "title": "Edit virtual preset",
+        "data": {
+          "preset_name": "Name",
+          "preset_height": "Height"
+        }
+      },
+      "delete_preset": {
+        "title": "Delete virtual preset",
+        "description": "Choose the preset to remove. This does not change the desk's hardware presets.",
+        "data": {
+          "preset": "Preset"
+        }
+      }
+    },
+    "error": {
+      "already_exists": "A virtual preset with this name already exists",
+      "invalid_name": "Enter a name containing at least one visible character"
+    }
   }
 }

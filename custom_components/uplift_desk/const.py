@@ -24,7 +24,6 @@ PLATFORMS: Final = [
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
-    Platform.TEXT,
 ]
 CONF_VIRTUAL_PRESETS: Final = "virtual_presets"
 MM_PER_INCH: Final = 25.4

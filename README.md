@@ -41,8 +41,8 @@ Enabled by default:
 - Target height, which stages a value without moving the desk
 - Move-to-target, sit, stand, and stop buttons
 - Fixed 500 ms jog up/down buttons
-- Unlimited Home Assistant virtual presets with name, height, select, save,
-  recall, and delete controls
+- Unlimited Home Assistant virtual presets managed through a normal
+  **Configure → Presets** form, plus select and recall controls on the device
 
 Disabled by default:
 
@@ -52,11 +52,13 @@ Movement controls remain unavailable until required height limits and preset
 values are known. The integration does not guess movement bounds.
 
 Height sensors and number controls use inches natively in Home Assistant while
-the desk transports continue using millimeters internally. To create a virtual
-preset, jog the desk into place and press **Use current height** (or enter an
-exact height), enter a name, and press **Save virtual preset**. Select and recall
-it later. Virtual presets are stored in the Home Assistant config entry; they do
-not consume the desk's hardware preset slots.
+the desk transports continue using millimeters internally. To manage virtual
+presets, open **Settings → Devices & services → UPLIFT Desk → Configure**. The
+form lists existing presets and provides **Add**, **Edit**, and **Delete**
+actions. Add asks only for a name and height, prefilled with the current desk
+height when available. Saved presets appear in the device's **Virtual preset**
+selector and move through **Recall virtual preset**. They are stored in the Home
+Assistant config entry and do not consume the desk's hardware preset slots.
 
 ## Connection architecture
 

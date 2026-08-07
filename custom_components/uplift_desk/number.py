@@ -18,12 +18,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up target height."""
-    async_add_entities(
-        [
-            UpliftTargetHeight(entry.runtime_data),
-            UpliftVirtualPresetHeight(entry.runtime_data),
-        ]
-    )
+    async_add_entities([UpliftTargetHeight(entry.runtime_data)])
 
 
 class UpliftTargetHeight(UpliftDeskEntity, NumberEntity):
@@ -65,42 +60,3 @@ class UpliftTargetHeight(UpliftDeskEntity, NumberEntity):
         await self.coordinator.async_execute(
             lambda: self.coordinator.api.async_set_target_height(value * MM_PER_INCH)
         )
-
-
-class UpliftVirtualPresetHeight(UpliftDeskEntity, NumberEntity):
-    """Stage a height for an unlimited Home Assistant virtual preset."""
-
-    _attr_name = "Virtual preset height"
-    _attr_device_class = NumberDeviceClass.DISTANCE
-    _attr_native_unit_of_measurement = UnitOfLength.INCHES
-    _attr_native_step = 0.1
-    _attr_mode = NumberMode.BOX
-
-    def __init__(self, coordinator) -> None:
-        super().__init__(coordinator, "virtual_preset_height")
-
-    @property
-    def available(self) -> bool:
-        return bool(
-            super().available
-            and self.state_data.get("minimumMm") is not None
-            and self.state_data.get("maximumMm") is not None
-        )
-
-    @property
-    def native_min_value(self) -> float:
-        return round(float(self.state_data.get("minimumMm", 0)) / MM_PER_INCH, 2)
-
-    @property
-    def native_max_value(self) -> float:
-        return round(
-            float(self.state_data.get("maximumMm", 2000)) / MM_PER_INCH, 2
-        )
-
-    @property
-    def native_value(self) -> float | None:
-        value = self.coordinator.virtual_preset_height_mm
-        return round(float(value) / MM_PER_INCH, 2) if value is not None else None
-
-    async def async_set_native_value(self, value: float) -> None:
-        self.coordinator.set_virtual_preset_height(value * MM_PER_INCH)
