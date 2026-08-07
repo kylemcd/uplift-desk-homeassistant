@@ -49,27 +49,37 @@ export class BluezUpliftTransport implements UpliftTransport {
       objects = await this.#managedObjects()
     }
     if (!objects[this.#devicePath]?.["org.bluez.Device1"]) throw new Error(`device ${this.#options.address} was not discovered`)
-    await this.#runner.call(["call", "org.bluez", this.#devicePath, "org.bluez.Device1", "Connect"])
-    objects = await this.#waitForServices()
-    const detected = detectProfileFromManagedObjects(objects, this.#devicePath)
-    this.#profile = detected.profile
-    this.#inputPath = detected.inputPath
-    this.#outputPath = detected.outputPath
-    this.#inputFlags = detected.inputFlags
-    this.#notificationSession = this.#runner.notify(this.#outputPath, (value) => this.#events.emit("notification", value))
-    await this.#notificationSession.ready
-    const notificationSession = this.#notificationSession
-    void notificationSession.closed.then((error) => {
-      if (this.#notificationSession !== notificationSession || !this.#connected) return
+    try {
+      await this.#runner.call(["call", "org.bluez", this.#devicePath, "org.bluez.Device1", "Connect"])
+      objects = await this.#waitForServices()
+      const detected = detectProfileFromManagedObjects(objects, this.#devicePath)
+      this.#profile = detected.profile
+      this.#inputPath = detected.inputPath
+      this.#outputPath = detected.outputPath
+      this.#inputFlags = detected.inputFlags
+      this.#notificationSession = this.#runner.notify(this.#outputPath, (value) => this.#events.emit("notification", value))
+      await this.#notificationSession.ready
+      const notificationSession = this.#notificationSession
+      void notificationSession.closed.then(async (error) => {
+        if (this.#notificationSession !== notificationSession || !this.#connected) return
+        this.#notificationSession = undefined
+        if (this.#connectionPoll) clearInterval(this.#connectionPoll)
+        this.#connectionPoll = undefined
+        this.#connected = false
+        await this.#disconnectDevice()
+        this.#events.emit("disconnect", error ?? new Error("Bluetooth notification session ended"))
+      })
+      this.#connected = true
+      this.#connectionPoll = setInterval(() => void this.#pollConnection(), 5_000)
+      return this.#profile
+    } catch (error) {
+      const notificationSession = this.#notificationSession
       this.#notificationSession = undefined
-      if (this.#connectionPoll) clearInterval(this.#connectionPoll)
-      this.#connectionPoll = undefined
+      notificationSession?.close()
       this.#connected = false
-      this.#events.emit("disconnect", error ?? new Error("Bluetooth notification session ended"))
-    })
-    this.#connected = true
-    this.#connectionPoll = setInterval(() => void this.#pollConnection(), 5_000)
-    return this.#profile
+      await this.#disconnectDevice()
+      throw error
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -79,7 +89,7 @@ export class BluezUpliftTransport implements UpliftTransport {
     const notificationSession = this.#notificationSession
     this.#notificationSession = undefined
     notificationSession?.close()
-    if (this.#devicePath) await this.#runner.call(["call", "org.bluez", this.#devicePath, "org.bluez.Device1", "Disconnect"]).catch(() => undefined)
+    await this.#disconnectDevice()
   }
 
   async write(packet: Uint8Array): Promise<void> {
@@ -151,6 +161,10 @@ export class BluezUpliftTransport implements UpliftTransport {
       this.#events.emit("disconnect", error instanceof Error ? error : new Error(String(error)))
     }
   }
+
+  async #disconnectDevice(): Promise<void> {
+    if (this.#devicePath) await this.#runner.call(["call", "org.bluez", this.#devicePath, "org.bluez.Device1", "Disconnect"]).catch(() => undefined)
+  }
 }
 
 interface BusctlVariant { type: string; data: unknown }
@@ -203,7 +217,7 @@ export class BusctlCommandRunner implements BluezCommandRunner {
   }
 
   notify(path: string, onValue: (value: Uint8Array) => void): { ready: Promise<void>; closed: Promise<Error | undefined>; close(): void } {
-    const child = spawn(this.#bluetoothctl, [], { stdio: ["pipe", "pipe", "pipe"] })
+    const child = spawn(this.#bluetoothctl, ["--timeout", "0"], { stdio: ["pipe", "pipe", "pipe"] })
     const decoder = new BluetoothctlNotificationDecoder()
     let settled = false
     let resolveReady: (() => void) | undefined

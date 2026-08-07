@@ -68,4 +68,31 @@ describe("bluetoothctl notification decoding", () => {
     expect(transport.connected).toBe(false)
     vi.useRealTimers()
   })
+
+  it("disconnects BlueZ before reporting an ended notification session", async () => {
+    let closeNotification: ((error: Error | undefined) => void) | undefined
+    const calls: string[][] = []
+    const runner: BluezCommandRunner = {
+      call: (args) => {
+        calls.push([...args])
+        return Promise.resolve(args[0] === "--json=short" ? managedObjects(true) : "")
+      },
+      scan: () => ({ done: Promise.resolve(), close: () => undefined }),
+      notify: () => ({
+        ready: Promise.resolve(),
+        closed: new Promise((resolve) => { closeNotification = resolve }),
+        close: () => undefined,
+      }),
+    }
+    const transport = new BluezUpliftTransport({ address: "02:00:00:00:00:01", runner })
+    const disconnected = vi.fn()
+    transport.onDisconnect(disconnected)
+    await transport.connect()
+
+    closeNotification?.(new Error("notification owner exited"))
+    await vi.waitFor(() => expect(disconnected).toHaveBeenCalledOnce())
+
+    expect(calls.some((args) => args.at(-1) === "Disconnect")).toBe(true)
+    expect(transport.connected).toBe(false)
+  })
 })
