@@ -4,10 +4,11 @@ This is an unofficial description of an undocumented protocol. Commands may
 behave differently across controller firmware and desk brands that reuse
 Jiecang hardware.
 
-The Linux transport invokes systemd's `busctl` for BlueZ method calls,
-`bluetoothctl` for a bounded discovery lease, and `dbus-monitor` for
-characteristic property-change signals. All three communicate through the
-system D-Bus; none claims a raw Bluetooth HCI socket. No JavaScript D-Bus
+The Linux transport invokes systemd's `busctl` for BlueZ method calls and
+`bluetoothctl` for discovery and a persistent GATT notification session. The
+persistent process is required because BlueZ binds a notification subscription
+to the D-Bus connection that requested it. Both tools communicate through the
+system D-Bus; neither claims a raw Bluetooth HCI socket. No JavaScript D-Bus
 binding is included as a runtime dependency.
 
 ## Observed hardware

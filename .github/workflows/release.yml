@@ -18,14 +18,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Pack TypeScript protocol library
+        run: npm pack --pack-destination .
       - name: Pack HACS integration
         run: |
           cd custom_components/uplift_desk
           zip -r ../../uplift_desk.zip . -x '__pycache__/*' '*.pyc'
           cd ../..
-          sha256sum uplift_desk.zip > SHA256SUMS
+          sha256sum uplift_desk.zip kylemcd-uplift-desk-ble-*.tgz > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             uplift_desk.zip
+            kylemcd-uplift-desk-ble-*.tgz
             SHA256SUMS

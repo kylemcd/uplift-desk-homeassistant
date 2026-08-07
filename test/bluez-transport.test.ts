@@ -1,23 +1,22 @@
 import { describe, expect, it } from "vitest"
-import { decodeDbusMonitorMessage } from "../src/bluez-transport.js"
+import { BluetoothctlNotificationDecoder } from "../src/bluez-transport.js"
 
-describe("dbus-monitor notification decoding", () => {
-  it("extracts a BlueZ characteristic Value byte array", () => {
-    const message = `signal sender=org.bluez -> destination=:1.1 serial=42 path=/org/bluez/hci0/dev_F2/service0010/char0012; interface=org.freedesktop.DBus.Properties; member=PropertiesChanged
-   string "org.bluez.GattCharacteristic1"
-   array [
-      dict entry(
-         string "Value"
-         variant             array of bytes [
-               f2  f2  01  02  03  06  7e
-            ]
-      )
-   ]`
+describe("bluetoothctl notification decoding", () => {
+  it("extracts the bytes printed after a characteristic Value change", () => {
+    const decoder = new BluetoothctlNotificationDecoder()
+    decoder.lines("\u001b[0;93m[CHG\u001b[0m] Attribute /org/bluez/hci0/dev_F2/service000b/char000e Value:\r\n")
+    decoder.lines("  f2 f2 25 02 01 09 31 7e                          ..%...1~\r\n")
 
-    expect(decodeDbusMonitorMessage(message)).toEqual(Uint8Array.from([0xf2, 0xf2, 0x01, 0x02, 0x03, 0x06, 0x7e]))
+    expect(decoder.values()).toEqual([Uint8Array.from([0xf2, 0xf2, 0x25, 0x02, 0x01, 0x09, 0x31, 0x7e])])
   })
 
-  it("ignores unrelated property signals", () => {
-    expect(decodeDbusMonitorMessage('string "org.bluez.Device1"\nstring "Connected"\nboolean true')).toBeUndefined()
+  it("handles fragmented output and ignores unrelated hex text", () => {
+    const decoder = new BluetoothctlNotificationDecoder()
+    decoder.lines("[CHG] Attribute /org/bluez/hci0/dev_F2/service000b/char000e Val")
+    decoder.lines("ue:\r\n  f2 f2 01 03 01")
+    expect(decoder.values()).toEqual([])
+    decoder.lines(" 0e 0f 22 7e                       .......\"~\r\nHandle 0x000e\r\n")
+
+    expect(decoder.values()).toEqual([Uint8Array.from([0xf2, 0xf2, 0x01, 0x03, 0x01, 0x0e, 0x0f, 0x22, 0x7e])])
   })
 })

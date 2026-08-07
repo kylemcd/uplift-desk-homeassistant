@@ -15,7 +15,7 @@ export interface BluezUpliftTransportOptions {
 export interface BluezCommandRunner {
   call(args: readonly string[]): Promise<string>
   scan(durationMs: number): { done: Promise<void>; close(): void }
-  monitor(path: string, onValue: (value: Uint8Array) => void): { close(): void }
+  notify(path: string, onValue: (value: Uint8Array) => void): { ready: Promise<void>; closed: Promise<Error | undefined>; close(): void }
 }
 
 export class BluezUpliftTransport implements UpliftTransport {
@@ -26,7 +26,7 @@ export class BluezUpliftTransport implements UpliftTransport {
   #inputPath?: string
   #outputPath?: string
   #inputFlags: string[] = []
-  #monitor: { close(): void } | undefined
+  #notificationSession: { ready: Promise<void>; closed: Promise<Error | undefined>; close(): void } | undefined
   #connectionPoll: NodeJS.Timeout | undefined
   #profile?: DeskProfile
   #connected = false
@@ -56,21 +56,26 @@ export class BluezUpliftTransport implements UpliftTransport {
     this.#inputPath = detected.inputPath
     this.#outputPath = detected.outputPath
     this.#inputFlags = detected.inputFlags
-    this.#monitor = this.#runner.monitor(this.#outputPath, (value) => this.#events.emit("notification", value))
-    await this.#runner.call(["call", "org.bluez", this.#outputPath, "org.bluez.GattCharacteristic1", "StartNotify"])
+    this.#notificationSession = this.#runner.notify(this.#outputPath, (value) => this.#events.emit("notification", value))
+    await this.#notificationSession.ready
+    const notificationSession = this.#notificationSession
+    void notificationSession.closed.then((error) => {
+      if (this.#notificationSession !== notificationSession || !this.#connected) return
+      this.#connected = false
+      this.#events.emit("disconnect", error ?? new Error("Bluetooth notification session ended"))
+    })
     this.#connected = true
     this.#connectionPoll = setInterval(() => void this.#pollConnection(), 5_000)
     return this.#profile
   }
 
   async disconnect(): Promise<void> {
+    this.#connected = false
     if (this.#connectionPoll) clearInterval(this.#connectionPoll)
     this.#connectionPoll = undefined
-    if (this.#outputPath) await this.#runner.call(["call", "org.bluez", this.#outputPath, "org.bluez.GattCharacteristic1", "StopNotify"]).catch(() => undefined)
-    this.#monitor?.close()
-    this.#monitor = undefined
+    this.#notificationSession?.close()
+    this.#notificationSession = undefined
     if (this.#devicePath) await this.#runner.call(["call", "org.bluez", this.#devicePath, "org.bluez.Device1", "Disconnect"]).catch(() => undefined)
-    this.#connected = false
   }
 
   async write(packet: Uint8Array): Promise<void> {
@@ -171,12 +176,10 @@ function variantValue(value: BusctlVariant | undefined): unknown { return value?
 export class BusctlCommandRunner implements BluezCommandRunner {
   readonly #busctl: string
   readonly #bluetoothctl: string
-  readonly #dbusMonitor: string
 
-  constructor(options: { busctl?: string; bluetoothctl?: string; dbusMonitor?: string } = {}) {
+  constructor(options: { busctl?: string; bluetoothctl?: string } = {}) {
     this.#busctl = options.busctl ?? "busctl"
     this.#bluetoothctl = options.bluetoothctl ?? "bluetoothctl"
-    this.#dbusMonitor = options.dbusMonitor ?? "dbus-monitor"
   }
 
   call(args: readonly string[]): Promise<string> {
@@ -190,34 +193,121 @@ export class BusctlCommandRunner implements BluezCommandRunner {
     return { done, close: () => child.kill("SIGTERM") }
   }
 
-  monitor(path: string, onValue: (value: Uint8Array) => void): { close(): void } {
-    const match = `type='signal',sender='org.bluez',path='${path}',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'`
-    const child = spawn(this.#dbusMonitor, ["--system", match], { stdio: ["ignore", "pipe", "pipe"] })
-    let block = ""
+  notify(path: string, onValue: (value: Uint8Array) => void): { ready: Promise<void>; closed: Promise<Error | undefined>; close(): void } {
+    const child = spawn(this.#bluetoothctl, [], { stdio: ["pipe", "pipe", "pipe"] })
+    const decoder = new BluetoothctlNotificationDecoder()
+    let settled = false
+    let resolveReady: (() => void) | undefined
+    let rejectReady: ((error: Error) => void) | undefined
+    let resolveClosed: ((error: Error | undefined) => void) | undefined
+    let closedSettled = false
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve
+      rejectReady = reject
+    })
+    const closed = new Promise<Error | undefined>((resolve) => {
+      resolveClosed = resolve
+    })
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true
+        rejectReady?.(new Error(`timed out enabling notifications for ${path}`))
+      }
+      child.kill("SIGTERM")
+    }, 10_000)
+
     child.stdout.setEncoding("utf8")
     child.stdout.on("data", (chunk: string) => {
-      block += chunk
-      const blocks = block.split(/\n\s*\n/)
-      block = blocks.pop() ?? ""
-      for (const message of blocks) emitBytes(message, onValue)
+      for (const line of decoder.lines(chunk)) {
+        if (line.includes("Notify started") || line.includes("Notifying: yes")) {
+          if (!settled) {
+            settled = true
+            clearTimeout(timeout)
+            resolveReady?.()
+          }
+        }
+        if (/Failed to start notify|not available|Invalid command/i.test(line)) {
+          if (!settled) {
+            settled = true
+            clearTimeout(timeout)
+            rejectReady?.(new Error(`bluetoothctl could not enable notifications for ${path}: ${line.trim()}`))
+            child.kill("SIGTERM")
+          }
+        }
+      }
+      for (const value of decoder.values()) onValue(value)
     })
-    return { close: () => child.kill("SIGTERM") }
+    child.once("error", (error) => {
+      if (!closedSettled) {
+        closedSettled = true
+        resolveClosed?.(error)
+      }
+      if (!settled) {
+        settled = true
+        clearTimeout(timeout)
+        rejectReady?.(error)
+      }
+    })
+    child.once("close", (code) => {
+      if (!closedSettled) {
+        closedSettled = true
+        resolveClosed?.(code === 0 || code === null ? undefined : new Error(`bluetoothctl notification process exited with code ${String(code)}`))
+      }
+      if (!settled) {
+        settled = true
+        clearTimeout(timeout)
+        rejectReady?.(new Error(`bluetoothctl exited before notifications were ready (code ${String(code)})`))
+      }
+    })
+    child.stdin.write(`agent off\nmenu gatt\nselect-attribute ${path}\nnotify on\n`)
+    return { ready, closed, close: () => child.kill("SIGTERM") }
   }
 }
 
-function emitBytes(message: string, onValue: (value: Uint8Array) => void): void {
-  const value = decodeDbusMonitorMessage(message)
-  if (value) onValue(value)
+function stripAnsi(value: string): string {
+  let result = ""
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) === 0x1b && value[index + 1] === "[") {
+      index += 2
+      while (index < value.length) {
+        const code = value.charCodeAt(index)
+        if (code >= 0x40 && code <= 0x7e) break
+        index += 1
+      }
+      continue
+    }
+    result += value[index]
+  }
+  return result
 }
 
-export function decodeDbusMonitorMessage(message: string): Uint8Array | undefined {
-  if (!message.includes('string "Value"') || !message.includes('string "org.bluez.GattCharacteristic1"')) return
-  const valueSection = message.slice(message.indexOf('string "Value"'))
-  const compactArray = valueSection.match(/array of bytes\s*\[([\s\S]*?)\]/i)
-  const bytes = compactArray
-    ? [...compactArray[1]!.matchAll(/\b([0-9a-f]{2})\b/gi)].map((match) => Number.parseInt(match[1]!, 16))
-    : [...valueSection.matchAll(/\bbyte\s+(?:0x([0-9a-f]{2})|(\d{1,3}))\b/gi)].map((match) => match[1] ? Number.parseInt(match[1], 16) : Number.parseInt(match[2]!, 10)).filter((byte) => byte <= 0xff)
-  return bytes.length > 0 ? Uint8Array.from(bytes) : undefined
+export class BluetoothctlNotificationDecoder {
+  #buffer = ""
+  #expectingValue = false
+  #values: Uint8Array[] = []
+
+  lines(chunk: string): string[] {
+    this.#buffer += chunk.replaceAll("\r", "\n")
+    const rawLines = this.#buffer.split("\n")
+    this.#buffer = rawLines.pop() ?? ""
+    const lines = rawLines.map(stripAnsi)
+    for (const line of lines) {
+      if (line.includes("Value:")) {
+        this.#expectingValue = true
+        continue
+      }
+      if (!this.#expectingValue) continue
+      const match = line.match(/(?:^|>\s*)\s*((?:[0-9a-f]{2}\s+){5,}[0-9a-f]{2})\b/i)
+      if (!match?.[1]) continue
+      this.#values.push(Uint8Array.from(match[1].trim().split(/\s+/).map((byte) => Number.parseInt(byte, 16))))
+      this.#expectingValue = false
+    }
+    return lines
+  }
+
+  values(): Uint8Array[] {
+    return this.#values.splice(0)
+  }
 }
 
 function run(command: string, args: readonly string[]): Promise<string> {
