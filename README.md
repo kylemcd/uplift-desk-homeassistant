@@ -45,6 +45,8 @@ Enabled by default:
   **Configure → Presets** form, plus select and recall controls on the device
 - One direct **Go to …** button per virtual preset for dashboards, automations,
   Siri, and HomeKit Bridge
+- Generic proximity binary sensors and RSSI diagnostics when an optional
+  broker exposes private-BLE presence targets
 
 Disabled by default:
 
@@ -86,7 +88,8 @@ UPLIFT desk ← BLE → Bluetooth Broker ← HTTP(S) → Home Assistant
 
 Broker URLs and desk IDs are discovered or entered during setup. The
 integration contains no hostnames, addresses, or credentials for a particular
-installation.
+installation. Private-BLE identity keys remain on the broker; Home Assistant
+only receives the resolved proximity state and signal strength.
 
 ## Protocol library
 
