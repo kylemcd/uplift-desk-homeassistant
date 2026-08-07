@@ -120,7 +120,7 @@ class UpliftDeskButton(UpliftDeskEntity, ButtonEntity):
         state = self.state_data
         base_available = bool(
             super().available
-            and state.get("connected")
+            and self.command_transport_available
             and not state.get("monitorOnly", False)
         )
         action = self.entity_description.action
@@ -200,7 +200,7 @@ class UpliftVirtualPresetButton(UpliftDeskEntity, ButtonEntity):
         maximum = state.get("maximumMm")
         return bool(
             super().available
-            and state.get("connected")
+            and self.command_transport_available
             and not state.get("monitorOnly", False)
             and height is not None
             and minimum is not None

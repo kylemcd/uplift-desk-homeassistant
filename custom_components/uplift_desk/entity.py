@@ -32,6 +32,13 @@ class UpliftDeskEntity(CoordinatorEntity[UpliftDeskCoordinator]):
         return str(self.coordinator.data.get("address", "unknown"))
 
     @property
+    def command_transport_available(self) -> bool:
+        """Return whether commands can be sent now or via broker reconnect."""
+        return bool(
+            self.state_data.get("connected") or self.coordinator.api.mode == "broker"
+        )
+
+    @property
     def device_info(self) -> DeviceInfo:
         """Describe the desk as one Home Assistant device."""
         profile = self.state_data.get("profile") or {}

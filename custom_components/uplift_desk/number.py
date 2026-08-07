@@ -35,7 +35,7 @@ class UpliftTargetHeight(UpliftDeskEntity, NumberEntity):
     def available(self) -> bool:
         return bool(
             super().available
-            and self.state_data.get("connected")
+            and self.command_transport_available
             and not self.state_data.get("monitorOnly", False)
             and self.state_data.get("minimumMm") is not None
             and self.state_data.get("maximumMm") is not None

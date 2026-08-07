@@ -41,14 +41,14 @@ class UpliftDeskCover(UpliftDeskEntity, CoverEntity):
 
     @property
     def available(self) -> bool:
-        """Require a connected desk, validated limits, and both mapped presets."""
+        """Require a command transport, validated limits, and mapped presets."""
         state = self.state_data
         presets = state.get("presets") or {}
         sit = state.get("sitPreset", 1)
         stand = state.get("standPreset", 2)
         return bool(
             super().available
-            and state.get("connected")
+            and self.command_transport_available
             and not state.get("monitorOnly", False)
             and state.get("minimumMm") is not None
             and state.get("maximumMm") is not None
