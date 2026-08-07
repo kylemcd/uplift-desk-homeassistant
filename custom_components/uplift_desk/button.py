@@ -80,7 +80,11 @@ class UpliftDeskButton(UpliftDeskEntity, ButtonEntity):
     def available(self) -> bool:
         if self.entity_description.action == "release":
             return super().available
-        return bool(super().available and self.state_data.get("connected"))
+        return bool(
+            super().available
+            and self.state_data.get("connected")
+            and not self.state_data.get("monitorOnly", False)
+        )
 
     async def async_press(self) -> None:
         api = self.coordinator.api

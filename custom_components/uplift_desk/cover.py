@@ -49,6 +49,7 @@ class UpliftDeskCover(UpliftDeskEntity, CoverEntity):
         return bool(
             super().available
             and state.get("connected")
+            and not state.get("monitorOnly", False)
             and state.get("minimumMm") is not None
             and state.get("maximumMm") is not None
             and presets.get(str(sit)) is not None
