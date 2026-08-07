@@ -12,9 +12,9 @@ from . import UpliftDeskConfigEntry
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: UpliftDeskConfigEntry
 ) -> dict[str, Any]:
-    """Return broker and desk state without credentials."""
+    """Return transport and desk state without credentials."""
     return {
         "entry": {"title": entry.title, "version": entry.version},
-        "broker_url": entry.runtime_data.api.base_url,
+        "transport": entry.runtime_data.api.mode,
         "desk": entry.runtime_data.data,
     }

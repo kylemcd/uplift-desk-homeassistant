@@ -6,8 +6,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import BluetoothBrokerApi
-from .const import CONF_BROKER_URL, PLATFORMS
+from .api import BluetoothBrokerApi, DeskApiError
+from .bluetooth import BluetoothDeskApi
+from .const import (
+    CONF_BROKER_URL,
+    CONF_CONNECTION_TYPE,
+    CONF_DESK_ID,
+    CONNECTION_BLUETOOTH,
+    CONNECTION_BROKER,
+    PLATFORMS,
+)
 from .coordinator import UpliftDeskCoordinator
 
 type UpliftDeskConfigEntry = ConfigEntry[UpliftDeskCoordinator]
@@ -15,7 +23,18 @@ type UpliftDeskConfigEntry = ConfigEntry[UpliftDeskCoordinator]
 
 async def async_setup_entry(hass: HomeAssistant, entry: UpliftDeskConfigEntry) -> bool:
     """Set up UPLIFT Desk from a config entry."""
-    api = BluetoothBrokerApi(async_get_clientsession(hass), entry.data[CONF_BROKER_URL])
+    if entry.data[CONF_CONNECTION_TYPE] == CONNECTION_BLUETOOTH:
+        api = BluetoothDeskApi(
+            hass,
+            entry.data["address"],
+            entry.data.get("name", entry.title),
+        )
+    else:
+        api = BluetoothBrokerApi(
+            async_get_clientsession(hass),
+            entry.data[CONF_BROKER_URL],
+            entry.data[CONF_DESK_ID],
+        )
     coordinator = UpliftDeskCoordinator(hass, api)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
@@ -25,4 +44,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: UpliftDeskConfigEntry) -
 
 async def async_unload_entry(hass: HomeAssistant, entry: UpliftDeskConfigEntry) -> bool:
     """Unload an UPLIFT Desk config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        await entry.runtime_data.api.async_close()
+    return unload_ok
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: UpliftDeskConfigEntry
+) -> bool:
+    """Migrate broker-only 0.2.x entries to the transport-aware schema."""
+    if entry.version >= 2:
+        return True
+    broker_url = entry.data.get(CONF_BROKER_URL)
+    if not broker_url:
+        return False
+    api = BluetoothBrokerApi(async_get_clientsession(hass), broker_url, "")
+    try:
+        desks = await api.async_desks()
+    except DeskApiError:
+        return False
+    if not desks or not desks[0].get("id"):
+        return False
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            CONF_CONNECTION_TYPE: CONNECTION_BROKER,
+            CONF_BROKER_URL: broker_url,
+            CONF_DESK_ID: str(desks[0]["id"]),
+        },
+        version=2,
+    )
+    return True

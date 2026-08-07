@@ -12,8 +12,8 @@ binding is included as a runtime dependency.
 
 ## Observed hardware
 
-`Kyle's Desk` advertises UUID `00FF` but, after connection, exposes service
-`FF00`, input characteristic `FF01`, and notification characteristic `FF02`.
+One observed adapter advertises UUID `00FF` but, after connection, exposes
+service `FF00`, input characteristic `FF01`, and notification characteristic `FF02`.
 Profile detection therefore validates the resolved GATT database instead of
 trusting advertisements alone.
 

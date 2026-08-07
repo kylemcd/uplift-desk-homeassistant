@@ -3,28 +3,57 @@
   "config": {
     "step": {
       "user": {
+        "title": "Add UPLIFT Desk",
+        "description": "Connect directly through Home Assistant Bluetooth or through an optional network Bluetooth Broker.",
+        "data": {
+          "connection_type": "Connection method"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Connect {name}",
+        "description": "Home Assistant will connect directly to this desk using a configured local adapter or Bluetooth proxy."
+      },
+      "bluetooth_device": {
+        "title": "Select Bluetooth desk",
+        "description": "Choose a supported desk discovered by Home Assistant Bluetooth.",
+        "data": {
+          "address": "Desk"
+        }
+      },
+      "broker": {
         "title": "Connect to Bluetooth Broker",
-        "description": "The Bluetooth Broker owns the desk's BLE connection and safety controls.",
+        "description": "Use this option only when another service owns the desk's Bluetooth connection.",
         "data": {
           "broker_url": "Broker URL"
         },
         "data_description": {
-          "broker_url": "Tailnet URL of the Bluetooth Broker, including https://"
+          "broker_url": "Base HTTP or HTTPS URL exposed to Home Assistant"
+        }
+      },
+      "broker_desk": {
+        "title": "Select broker desk",
+        "data": {
+          "desk_id": "Desk"
         }
       },
       "reconfigure": {
         "title": "Update Bluetooth Broker",
         "data": {
-          "broker_url": "Broker URL"
+          "broker_url": "Broker URL",
+          "desk_id": "Desk ID"
         }
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to the Bluetooth Broker"
+      "cannot_connect": "Unable to connect to the desk",
+      "no_broker_desks": "The broker did not report any desks"
     },
     "abort": {
-      "already_configured": "This desk is already configured"
+      "already_configured": "This desk is already configured",
+      "no_devices_found": "No supported Bluetooth desks were found",
+      "no_broker_desks": "The broker did not report any desks",
+      "not_connectable": "This Bluetooth advertisement is not connectable",
+      "reconfigure_not_supported": "Native Bluetooth entries do not require connection settings"
     }
   }
 }
-

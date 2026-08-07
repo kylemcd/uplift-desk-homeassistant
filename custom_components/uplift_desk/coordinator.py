@@ -1,4 +1,4 @@
-"""State coordinator for the UPLIFT Desk broker."""
+"""State coordinator for an UPLIFT desk transport."""
 
 from __future__ import annotations
 
@@ -10,16 +10,16 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import BluetoothBrokerApi, BrokerApiError
+from .api import DeskApi, DeskApiError
 from .const import DEFAULT_SCAN_INTERVAL_SECONDS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class UpliftDeskCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Poll broker state and refresh immediately after commands."""
+    """Refresh desk state and update immediately after commands."""
 
-    def __init__(self, hass: HomeAssistant, api: BluetoothBrokerApi) -> None:
+    def __init__(self, hass: HomeAssistant, api: DeskApi) -> None:
         super().__init__(
             hass,
             logger=_LOGGER,
@@ -31,7 +31,7 @@ class UpliftDeskCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             return await self.api.async_state()
-        except BrokerApiError as error:
+        except DeskApiError as error:
             raise UpdateFailed(str(error)) from error
 
     async def async_execute(self, command: Callable[[], Awaitable[None]]) -> None:

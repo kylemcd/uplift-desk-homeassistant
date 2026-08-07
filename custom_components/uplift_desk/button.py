@@ -78,13 +78,39 @@ class UpliftDeskButton(UpliftDeskEntity, ButtonEntity):
 
     @property
     def available(self) -> bool:
-        if self.entity_description.action == "release":
-            return super().available
-        return bool(
+        state = self.state_data
+        base_available = bool(
             super().available
-            and self.state_data.get("connected")
-            and not self.state_data.get("monitorOnly", False)
+            and state.get("connected")
+            and not state.get("monitorOnly", False)
         )
+        action = self.entity_description.action
+        if action == "release":
+            return bool(super().available and state.get("connected"))
+        if not base_available:
+            return False
+        if action == "move":
+            return bool(
+                state.get("targetHeightMm") is not None
+                and state.get("minimumMm") is not None
+                and state.get("maximumMm") is not None
+            )
+        if action in {"sit", "stand"}:
+            preset = (
+                state.get("sitPreset", 1)
+                if action == "sit"
+                else state.get("standPreset", 2)
+            )
+            value = (state.get("presets") or {}).get(str(preset))
+            minimum = state.get("minimumMm")
+            maximum = state.get("maximumMm")
+            return bool(
+                value is not None
+                and minimum is not None
+                and maximum is not None
+                and minimum <= value <= maximum
+            )
+        return True
 
     async def async_press(self) -> None:
         api = self.coordinator.api

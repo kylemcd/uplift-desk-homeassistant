@@ -13,7 +13,7 @@ from .coordinator import UpliftDeskCoordinator
 
 
 class UpliftDeskEntity(CoordinatorEntity[UpliftDeskCoordinator]):
-    """Base entity backed by broker-coordinated state."""
+    """Base entity backed by a desk transport."""
 
     _attr_has_entity_name = True
 
@@ -23,7 +23,7 @@ class UpliftDeskEntity(CoordinatorEntity[UpliftDeskCoordinator]):
 
     @property
     def state_data(self) -> dict[str, Any]:
-        """Return the latest broker state."""
+        """Return the latest desk state."""
         return self.coordinator.data
 
     @property
@@ -35,12 +35,14 @@ class UpliftDeskEntity(CoordinatorEntity[UpliftDeskCoordinator]):
     def device_info(self) -> DeviceInfo:
         """Describe the desk as one Home Assistant device."""
         profile = self.state_data.get("profile") or {}
-        return DeviceInfo(
+        device_info = DeviceInfo(
             identifiers={(DOMAIN, self.address)},
             connections={(dr.CONNECTION_BLUETOOTH, self.address)},
             name=str(self.state_data.get("name", "UPLIFT Desk")),
             manufacturer="UPLIFT Desk",
-            model="Bluetooth Adapter (Jiecang FF00)",
-            hw_version=str(profile.get("variant", "FF00/FF01/FF02")),
-            configuration_url=self.coordinator.api.base_url,
+            model="Bluetooth Adapter",
+            hw_version=str(profile.get("variant", "Jiecang BLE")),
         )
+        if self.coordinator.api.configuration_url:
+            device_info["configuration_url"] = self.coordinator.api.configuration_url
+        return device_info

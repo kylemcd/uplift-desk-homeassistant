@@ -35,6 +35,7 @@ class UpliftTargetHeight(UpliftDeskEntity, NumberEntity):
         return bool(
             super().available
             and self.state_data.get("connected")
+            and not self.state_data.get("monitorOnly", False)
             and self.state_data.get("minimumMm") is not None
             and self.state_data.get("maximumMm") is not None
         )
