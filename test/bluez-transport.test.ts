@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { BluetoothctlNotificationDecoder, BluezUpliftTransport, type BluezCommandRunner } from "../src/bluez-transport.js"
 
-const devicePath = "/org/bluez/hci0/dev_F2_94_81_26_3D_5D"
+const devicePath = "/org/bluez/hci0/dev_02_00_00_00_00_01"
 
 function managedObjects(connected: boolean): string {
   const variant = (type: string, data: unknown) => ({ type, data })
@@ -55,7 +55,7 @@ describe("bluetoothctl notification decoding", () => {
         },
       }),
     }
-    const transport = new BluezUpliftTransport({ address: "F2:94:81:26:3D:5D", runner })
+    const transport = new BluezUpliftTransport({ address: "02:00:00:00:00:01", runner })
     const disconnected = vi.fn()
     transport.onDisconnect(disconnected)
     await transport.connect()
