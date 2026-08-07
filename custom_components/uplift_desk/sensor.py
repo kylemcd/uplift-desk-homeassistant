@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import UpliftDeskConfigEntry
+from .const import MM_PER_INCH
 from .entity import UpliftDeskEntity
 
 
@@ -36,7 +37,7 @@ async def async_setup_entry(
 class UpliftHeightSensor(UpliftDeskEntity, SensorEntity):
     _attr_name = "Height"
     _attr_device_class = SensorDeviceClass.DISTANCE
-    _attr_native_unit_of_measurement = UnitOfLength.MILLIMETERS
+    _attr_native_unit_of_measurement = UnitOfLength.INCHES
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator) -> None:
@@ -45,7 +46,7 @@ class UpliftHeightSensor(UpliftDeskEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         value = self.state_data.get("heightMm")
-        return round(float(value), 1) if value is not None else None
+        return round(float(value) / MM_PER_INCH, 2) if value is not None else None
 
 
 class UpliftMovementSensor(UpliftDeskEntity, SensorEntity):

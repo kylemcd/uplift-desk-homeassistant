@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import UpliftDeskConfigEntry
@@ -39,14 +40,36 @@ BUTTONS = (
         name="Jog up",
         icon="mdi:arrow-up",
         action="jog_up",
-        entity_registry_enabled_default=False,
     ),
     UpliftButtonDescription(
         key="jog_down",
         name="Jog down",
         icon="mdi:arrow-down",
         action="jog_down",
-        entity_registry_enabled_default=False,
+    ),
+    UpliftButtonDescription(
+        key="capture_virtual_preset_height",
+        name="Use current height",
+        icon="mdi:arrow-collapse-vertical",
+        action="capture_virtual_preset_height",
+    ),
+    UpliftButtonDescription(
+        key="save_virtual_preset",
+        name="Save virtual preset",
+        icon="mdi:content-save",
+        action="save_virtual_preset",
+    ),
+    UpliftButtonDescription(
+        key="recall_virtual_preset",
+        name="Recall virtual preset",
+        icon="mdi:desk",
+        action="recall_virtual_preset",
+    ),
+    UpliftButtonDescription(
+        key="delete_virtual_preset",
+        name="Delete virtual preset",
+        icon="mdi:delete-outline",
+        action="delete_virtual_preset",
     ),
     UpliftButtonDescription(
         key="release",
@@ -64,6 +87,18 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up daily desk buttons."""
+    registry = er.async_get(hass)
+    address = str(entry.runtime_data.data.get("address", "unknown"))
+    jog_unique_ids = {
+        f"{address}_{key}".lower().replace(":", "")
+        for key in ("jog_up", "jog_down")
+    }
+    for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (
+            registry_entry.unique_id in jog_unique_ids
+            and registry_entry.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        ):
+            registry.async_update_entity(registry_entry.entity_id, disabled_by=None)
     async_add_entities(
         [UpliftDeskButton(entry.runtime_data, description) for description in BUTTONS]
     )
@@ -95,6 +130,33 @@ class UpliftDeskButton(UpliftDeskEntity, ButtonEntity):
                 and state.get("minimumMm") is not None
                 and state.get("maximumMm") is not None
             )
+        if action == "save_virtual_preset":
+            height = self.coordinator.virtual_preset_height_mm
+            minimum = state.get("minimumMm")
+            maximum = state.get("maximumMm")
+            return bool(
+                self.coordinator.virtual_preset_name.strip()
+                and height is not None
+                and minimum is not None
+                and maximum is not None
+                and minimum <= height <= maximum
+            )
+        if action == "capture_virtual_preset_height":
+            return state.get("heightMm") is not None
+        if action in {"recall_virtual_preset", "delete_virtual_preset"}:
+            selected = self.coordinator.selected_virtual_preset
+            if selected is None or selected not in self.coordinator.virtual_presets:
+                return False
+            if action == "delete_virtual_preset":
+                return True
+            height = self.coordinator.virtual_presets[selected]
+            minimum = state.get("minimumMm")
+            maximum = state.get("maximumMm")
+            return bool(
+                minimum is not None
+                and maximum is not None
+                and minimum <= height <= maximum
+            )
         if action in {"sit", "stand"}:
             preset = (
                 state.get("sitPreset", 1)
@@ -121,6 +183,21 @@ class UpliftDeskButton(UpliftDeskEntity, ButtonEntity):
             "stop": api.async_stop,
             "jog_up": lambda: api.async_jog("up"),
             "jog_down": lambda: api.async_jog("down"),
+            "capture_virtual_preset_height": (
+                self.coordinator.async_capture_current_height
+            ),
+            "save_virtual_preset": self.coordinator.async_save_virtual_preset,
+            "recall_virtual_preset": self.coordinator.async_recall_virtual_preset,
+            "delete_virtual_preset": self.coordinator.async_delete_virtual_preset,
             "release": api.async_release,
         }
-        await self.coordinator.async_execute(actions[self.entity_description.action])
+        action = self.entity_description.action
+        if action in {
+            "capture_virtual_preset_height",
+            "save_virtual_preset",
+            "recall_virtual_preset",
+            "delete_virtual_preset",
+        }:
+            await actions[action]()
+            return
+        await self.coordinator.async_execute(actions[action])
