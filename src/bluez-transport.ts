@@ -217,7 +217,9 @@ export class BusctlCommandRunner implements BluezCommandRunner {
   }
 
   notify(path: string, onValue: (value: Uint8Array) => void): { ready: Promise<void>; closed: Promise<Error | undefined>; close(): void } {
-    const child = spawn(this.#bluetoothctl, ["--timeout", "0"], { stdio: ["pipe", "pipe", "pipe"] })
+    // Interactive bluetoothctl stays alive until explicitly terminated. On
+    // current BlueZ, `--timeout 0` still exits after the default idle timeout.
+    const child = spawn(this.#bluetoothctl, [], { stdio: ["pipe", "pipe", "pipe"] })
     const decoder = new BluetoothctlNotificationDecoder()
     let settled = false
     let resolveReady: (() => void) | undefined
