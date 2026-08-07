@@ -59,8 +59,14 @@ class UpliftDeskCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_recall_virtual_preset(self) -> None:
         """Move the desk to the selected Home Assistant virtual preset."""
         name = self.selected_virtual_preset
-        if name is None or name not in self.virtual_presets:
+        if name is None:
             raise DeskCommandError("No virtual preset is selected")
+        await self.async_recall_virtual_preset_named(name)
+
+    async def async_recall_virtual_preset_named(self, name: str) -> None:
+        """Move the desk to a named Home Assistant virtual preset."""
+        if name not in self.virtual_presets:
+            raise DeskCommandError(f"Virtual preset {name!r} does not exist")
         height_mm = self.virtual_presets[name]
         self._validate_height(height_mm)
 

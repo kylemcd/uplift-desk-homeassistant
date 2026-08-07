@@ -43,6 +43,8 @@ Enabled by default:
 - Fixed 500 ms jog up/down buttons
 - Unlimited Home Assistant virtual presets managed through a normal
   **Configure → Presets** form, plus select and recall controls on the device
+- One direct **Go to …** button per virtual preset for dashboards, automations,
+  Siri, and HomeKit Bridge
 
 Disabled by default:
 
@@ -59,6 +61,14 @@ actions. Add asks only for a name and height, prefilled with the current desk
 height when available. Saved presets appear in the device's **Virtual preset**
 selector and move through **Recall virtual preset**. They are stored in the Home
 Assistant config entry and do not consume the desk's hardware preset slots.
+
+### HomeKit Bridge
+
+Each virtual preset automatically creates a direct **Go to …** button. Add the
+buttons you want to the HomeKit Bridge entity filter. Home Assistant maps each
+button to a momentary switch in Apple Home, so it can be tapped from an iPhone
+or invoked by name through Siri. Adding, renaming, or deleting a preset reloads
+the integration and keeps the generated buttons in sync.
 
 ## Connection architecture
 
